@@ -376,3 +376,51 @@ int TLS_init()
     SSL_load_error_strings();
     return 1;
 }
+
+#ifdef GTEST
+#include "gtest/gtest.h"
+
+TEST(TLSCiphers, ValidCipherList) {
+    SSL_library_init();
+    SSL_CTX* ctx = SSL_CTX_new(TLS_method());
+    ASSERT_NE(nullptr, ctx);
+
+    EXPECT_EQ(1, SSL_CTX_set_cipher_list(ctx, "HIGH:!aNULL"));
+    EXPECT_EQ(1, SSL_CTX_set_cipher_list(ctx, "DEFAULT"));
+    EXPECT_EQ(1, SSL_CTX_set_cipher_list(ctx, "HIGH:MEDIUM:!eNULL"));
+
+    SSL_CTX_free(ctx);
+}
+
+TEST(TLSCiphers, InvalidCipherList) {
+    SSL_CTX* ctx = SSL_CTX_new(TLS_method());
+    ASSERT_NE(nullptr, ctx);
+
+    EXPECT_NE(1, SSL_CTX_set_cipher_list(ctx, "BOGUS_CIPHER_SUITE"));
+
+    SSL_CTX_free(ctx);
+}
+
+TEST(TLSCiphers, Tls13Ciphersuites) {
+    SSL_CTX* ctx = SSL_CTX_new(TLS_method());
+    ASSERT_NE(nullptr, ctx);
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+    EXPECT_EQ(1, SSL_CTX_set_ciphersuites(ctx, "TLS_AES_128_GCM_SHA256"));
+    EXPECT_EQ(1, SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384"));
+#endif
+    SSL_CTX_free(ctx);
+}
+
+TEST(TLSCiphers, ClientServerContexts) {
+    SSL_CTX* server_ctx = SSL_CTX_new(TLS_server_method());
+    SSL_CTX* client_ctx = SSL_CTX_new(TLS_client_method());
+    ASSERT_NE(nullptr, server_ctx);
+    ASSERT_NE(nullptr, client_ctx);
+
+    EXPECT_EQ(1, SSL_CTX_set_cipher_list(server_ctx, "HIGH:MEDIUM"));
+    EXPECT_EQ(1, SSL_CTX_set_cipher_list(client_ctx, "HIGH:MEDIUM"));
+
+    SSL_CTX_free(server_ctx);
+    SSL_CTX_free(client_ctx);
+}
+#endif
