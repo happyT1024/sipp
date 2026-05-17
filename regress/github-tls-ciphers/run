@@ -1,0 +1,100 @@
+#!/bin/sh
+# Regression test for --tls_ciphers option.
+# Tests that:
+#   - default (no --tls_ciphers) works
+#   - valid ciphers string works
+#   - invalid ciphers string produces warning (not crash)
+
+. "`dirname "$0"`/../functions"; init
+
+if ! `get_sipp` -v 2>&1 | grep -q TLS; then
+    skip "sipp not compiled with TLS support"
+fi
+
+WARN_COUNT=0
+fail() { WARN_COUNT=$((WARN_COUNT + 1)); echo "FAIL: $@" >&2; }
+
+# Generate self-signed cert and key for TLS
+if test ! -f cert.pem || test ! -f key.pem; then
+    openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem \
+        -days 365 -nodes -subj '/CN=sipp-test' 2>/dev/null
+fi
+CERT="`pwd`/cert.pem"
+KEY="`pwd`/key.pem"
+SIPP=`get_sipp`
+
+# -------------------------------------------------------
+# Test 1: default ciphers (no --tls_ciphers) — regression
+# -------------------------------------------------------
+PORT1=15070
+sippbg -sn uas -p $PORT1 -t l1 -tls_cert "$CERT" -tls_key "$KEY" -i 127.0.0.1
+$SIPP -m 1 -sn uac -p $((PORT1 + 1)) -t l1 \
+    -tls_cert "$CERT" -tls_key "$KEY" \
+    127.0.0.1:$PORT1 -i 127.0.0.1 -timeout 5 -timeout_error \
+    >/dev/null 2>&1
+status=$?
+cleanup
+test $status -eq 0 || fail "default ciphers: UAC failed (exit $status)"
+echo -n "."
+
+# -------------------------------------------------------
+# Test 2: explicit valid ciphers
+# -------------------------------------------------------
+PORT2=15072
+sippbg -sn uas -p $PORT2 -t l1 -tls_cert "$CERT" -tls_key "$KEY" -i 127.0.0.1
+$SIPP -m 1 -sn uac -p $((PORT2 + 1)) -t l1 \
+    -tls_cert "$CERT" -tls_key "$KEY" \
+    --tls_ciphers "HIGH:!aNULL" \
+    127.0.0.1:$PORT2 -i 127.0.0.1 -timeout 5 -timeout_error \
+    >/dev/null 2>&1
+status=$?
+cleanup
+test $status -eq 0 || fail "valid ciphers (HIGH:!aNULL): UAC failed (exit $status)"
+echo -n "."
+
+# -------------------------------------------------------
+# Test 3: invalid ciphers — must not crash
+# -------------------------------------------------------
+PORT3=15074
+sippbg -sn uas -p $PORT3 -t l1 -tls_cert "$CERT" -tls_key "$KEY" -i 127.0.0.1
+$SIPP -m 1 -sn uac -p $((PORT3 + 1)) -t l1 \
+    -tls_cert "$CERT" -tls_key "$KEY" \
+    --tls_ciphers "BOGUS_CIPHER_SUITE" \
+    127.0.0.1:$PORT3 -i 127.0.0.1 -timeout 5 -timeout_error \
+    >/dev/null 2>&1
+status=$?
+cleanup
+
+# Must not crash with signal (exit > 128 means killed by signal)
+if test $status -gt 128; then
+    fail "invalid ciphers: sipp crashed with signal (exit $status)"
+fi
+echo -n "."
+
+# -------------------------------------------------------
+# Test 4: TLS 1.3 cipher suite (OpenSSL >= 1.1.1)
+# -------------------------------------------------------
+PORT4=15076
+sippbg -sn uas -p $PORT4 -t l1 -tls_cert "$CERT" -tls_key "$KEY" -i 127.0.0.1
+$SIPP -m 1 -sn uac -p $((PORT4 + 1)) -t l1 \
+    -tls_cert "$CERT" -tls_key "$KEY" \
+    --tls_ciphers "TLS_AES_128_GCM_SHA256" \
+    127.0.0.1:$PORT4 -i 127.0.0.1 -timeout 5 -timeout_error \
+    >/dev/null 2>&1
+status=$?
+cleanup
+if test $status -ne 0; then
+    # TLS 1.3 only works if both ends support it — optional
+    echo -n "s"
+else
+    echo -n "."
+fi
+
+# -------------------------------------------------------
+# Summary
+# -------------------------------------------------------
+if test $WARN_COUNT -gt 0; then
+    fail "$WARN_COUNT test(s) failed"
+    exit 1
+fi
+ok

@@ -1,3 +1,8 @@
+Features added in 3.7.6
+=======================
+
+- Add `--tls_ciphers` option for TLS cipher selection (by happyT1024)
+
 Features added in 3.7.5
 =======================
 
