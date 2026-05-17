@@ -59,6 +59,15 @@ The TLS key log file format is described here: https://datatracker.ietf.org/doc/
 
 _Please note the security considerations ("3. Security Considerations")!_
 
+TLS cipher selection is supported via the `--tls_ciphers` runtime option:
+
+```
+sipp -t l1 --tls_ciphers "HIGH:!aNULL" -sn uac 127.0.0.1:5060
+```
+
+The cipher string is applied to both TLS 1.2 (and below) and TLS 1.3 cipher suites.
+See `openssl ciphers` for the cipher list format.
+
 ## Static builds
 
 SIPp can be built into a single static binary, removing the need for
